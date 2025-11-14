@@ -662,6 +662,12 @@ def multilingual_cleaners(text, lang):
     text = expand_abbreviations_multilingual(text, lang)
     text = expand_symbols_multilingual(text, lang=lang)
     text = collapse_whitespace(text)
+    text = remove_quotes(text)
+    return text
+
+def remove_quotes(text):
+    text = text.replace("«", "")
+    text = text.replace("»", "")
     return text
 
 
