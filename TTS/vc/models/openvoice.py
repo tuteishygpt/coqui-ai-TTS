@@ -14,7 +14,6 @@ from torch import nn
 from torch.nn import functional as F
 
 from TTS.tts.layers.vits.networks import PosteriorEncoder
-from TTS.tts.utils.speakers import SpeakerManager
 from TTS.utils.audio.torch_transforms import wav_to_spec
 from TTS.utils.voices import CloningMixin
 from TTS.vc.configs.openvoice_config import OpenVoiceConfig
@@ -118,10 +117,10 @@ class OpenVoice(CloningMixin, BaseVC):
     October 2023, serving as the backend of MyShell.
     """
 
-    def __init__(self, config: Coqpit, speaker_manager: SpeakerManager | None = None) -> None:
-        super().__init__(config, None, speaker_manager, None)
+    config: OpenVoiceConfig
 
-        self.init_multispeaker(config)
+    def __init__(self, config: Coqpit) -> None:
+        super().__init__(config)
 
         self.zero_g = self.args.zero_g
         self.inter_channels = self.args.inter_channels
@@ -178,20 +177,6 @@ class OpenVoice(CloningMixin, BaseVC):
     @staticmethod
     def init_from_config(config: OpenVoiceConfig) -> "OpenVoice":
         return OpenVoice(config)
-
-    def init_multispeaker(self, config: Coqpit, data: list[Any] | None = None) -> None:
-        """Initialize multi-speaker modules of a model. A model can be trained either with a speaker embedding layer
-        or with external `d_vectors` computed from a speaker encoder model.
-
-        You must provide a `speaker_manager` at initialization to set up the multi-speaker modules.
-
-        Args:
-            config (Coqpit): Model configuration.
-            data (list, optional): Dataset items to infer number of speakers. Defaults to None.
-        """
-        self.num_spks = config.num_speakers
-        if self.speaker_manager:
-            self.num_spks = self.speaker_manager.num_speakers
 
     def load_checkpoint(
         self,
@@ -279,11 +264,12 @@ class OpenVoice(CloningMixin, BaseVC):
             out = torch.from_numpy(np.array(wav))
         else:
             out = wav
+        if out.dim() == 1:
+            out = out.unsqueeze(0)
         return out.to(self.device).float()
 
     def extract_se(self, audio: str | os.PathLike[Any] | torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         y = self.load_audio(audio)
-        y = y.to(self.device)
         y = y.unsqueeze(0)
         spec = wav_to_spec(
             y,

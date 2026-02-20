@@ -54,7 +54,6 @@ def test_train(tmp_path):
 
     # active multilingual mode
     config.model_args.use_language_embedding = True
-    config.use_language_embedding = True
 
     # deactivate multispeaker mode
     config.model_args.use_speaker_embedding = False

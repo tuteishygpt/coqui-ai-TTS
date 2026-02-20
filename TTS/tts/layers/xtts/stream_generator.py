@@ -29,24 +29,19 @@ def setup_seed(seed: int) -> None:
     torch.backends.cudnn.deterministic = True
 
 
-class StreamGenerationConfig(GenerationConfig):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.do_stream = kwargs.pop("do_stream", False)
-
-
 class NewGenerationMixin(GenerationMixin):
     @torch.inference_mode()
     def generate(  # noqa: PLR0911
         self,
         inputs: torch.Tensor | None = None,
-        generation_config: StreamGenerationConfig | None = None,
+        generation_config: GenerationConfig | None = None,
         logits_processor: LogitsProcessorList | None = None,
         stopping_criteria: StoppingCriteriaList | None = None,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]] | None = None,
         synced_gpus: bool | None = False,
         assistant_model: PreTrainedModel | None = None,
-        use_model_defaults: bool | None = None,
+        streamer: "BaseStreamer | None" = None,
+        custom_generate: str | Callable | None = None,
         seed: int = 0,
         **kwargs,
     ) -> GenerateOutput | torch.LongTensor:
@@ -100,11 +95,6 @@ class NewGenerationMixin(GenerationMixin):
                 same tokenizer. The acceleration is achieved when forecasting candidate tokens with the assistant model
                 is much faster than running generation with the model you're calling generate from. As such, the
                 assistant model should be much smaller.
-            use_model_defaults (`bool`, *optional*):
-                When it is `True`, unset parameters in `generation_config` will be set to the model-specific default
-                generation configuration (`model.generation_config`), as opposed to the global defaults
-                (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
-                `True`.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -131,15 +121,23 @@ class NewGenerationMixin(GenerationMixin):
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
         """
         # setup_seed(seed)
-        # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
-        tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
-        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
-
-        generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
+        # 1. Handle kwargs, `generation_config`, validate them and obtain generation mode
+        generation_mode_kwargs = self._extract_generation_mode_kwargs(
+            custom_generate, kwargs, synced_gpus, assistant_model, streamer
         )
+        # Check length values before updating the config with defaults.
+        # We'll use it later to define the final min/max length (# 6)
+        has_default_max_length = kwargs.get("max_length") is None and (
+            generation_config is None or generation_config.max_length is None
+        )
+        has_default_min_length = kwargs.get("min_length") is None and (
+            generation_config is None or generation_config.min_length is None
+        )
+        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+
+        generation_mode = generation_config.get_generation_mode(assistant_model)
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
+        self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
 
         # 2. Set generation parameters if not already defined
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -198,10 +196,16 @@ class NewGenerationMixin(GenerationMixin):
         # if decoder-only then inputs_tensor has to be `input_ids`
         input_ids = inputs_tensor
 
+        # Expand inputs depending on the generation mode
+        input_ids, model_kwargs = self._expand_inputs_for_generation(
+            input_ids=input_ids,
+            expand_size=generation_config.num_return_sequences,
+            is_encoder_decoder=self.config.is_encoder_decoder,
+            **model_kwargs,
+        )
+
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_length = input_ids.shape[-1]
-        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
         generation_config = self._prepare_generated_length(
             generation_config=generation_config,
             has_default_max_length=has_default_max_length,
@@ -225,7 +229,7 @@ class NewGenerationMixin(GenerationMixin):
         ):
             max_cache_length += inputs_tensor.shape[1]
         self._prepare_cache_for_generation(
-            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device
+            generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
 
         if self.device.type != input_ids.device.type:
@@ -250,19 +254,13 @@ class NewGenerationMixin(GenerationMixin):
             model_kwargs=model_kwargs,
         )
         prepared_stopping_criteria = self._get_stopping_criteria(
-            generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs
+            generation_config=generation_config,
+            stopping_criteria=stopping_criteria,
+            tokenizer=generation_mode_kwargs.get("tokenizer"),
         )
 
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
-
-        # 12. expand input_ids with `num_return_sequences` additional sequences per batch
-        input_ids, model_kwargs = self._expand_inputs_for_generation(
-            input_ids=input_ids,
-            expand_size=generation_config.num_return_sequences,
-            is_encoder_decoder=self.config.is_encoder_decoder,
-            **model_kwargs,
-        )
 
         # 13. run sample
         return self.sample_stream(
@@ -396,12 +394,7 @@ class NewGenerationMixin(GenerationMixin):
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # forward pass to get next token
-            outputs = self(
-                **model_inputs,
-                return_dict=True,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
+            outputs = self(**model_inputs, return_dict=True)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -499,7 +492,6 @@ if __name__ == "__main__":
             repetition_penalty=1.2,
             early_stopping=True,
             seed=0,
-            do_stream=True,
         )
         stream_result = ""
         for x in generator:

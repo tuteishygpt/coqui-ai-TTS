@@ -5,7 +5,7 @@ import re
 from coqpit import Coqpit
 
 from TTS.utils.generic_utils import to_camel
-from TTS.vocoder.configs.shared_configs import BaseGANVocoderConfig, BaseVocoderConfig
+from TTS.vocoder.configs import BaseGANVocoderConfig, BaseVocoderConfig
 from TTS.vocoder.models.base_vocoder import BaseVocoder
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,5 @@
 import sys
 import time
-from dataclasses import dataclass, field
 
 import numpy as np
 import torch
@@ -13,6 +12,7 @@ from torch.utils.data.distributed import DistributedSampler
 from TTS.tts.utils.visual import plot_spectrogram
 from TTS.utils.audio import AudioProcessor
 from TTS.utils.audio.numpy_transforms import mulaw_decode
+from TTS.vocoder.configs import WavernnConfig
 from TTS.vocoder.datasets.wavernn_dataset import WaveRNNDataset
 from TTS.vocoder.layers.losses import WaveRNNLoss
 from TTS.vocoder.layers.upsample import Stretch2d
@@ -131,59 +131,16 @@ class Upsample(nn.Module):
         return m.transpose(1, 2), aux
 
 
-@dataclass
-class WavernnArgs(Coqpit):
-    """🐸 WaveRNN model arguments.
-
-    rnn_dims (int):
-        Number of hidden channels in RNN layers. Defaults to 512.
-    fc_dims (int):
-        Number of hidden channels in fully-conntected layers. Defaults to 512.
-    compute_dims (int):
-        Number of hidden channels in the feature ResNet. Defaults to 128.
-    res_out_dim (int):
-        Number of hidden channels in the feature ResNet output. Defaults to 128.
-    num_res_blocks (int):
-        Number of residual blocks in the ResNet. Defaults to 10.
-    use_aux_net (bool):
-        enable/disable the feature ResNet. Defaults to True.
-    use_upsample_net (bool):
-        enable/ disable the upsampling networl. If False, basic upsampling is used. Defaults to True.
-    upsample_factors (list):
-        Upsampling factors. The multiply of the values must match the `hop_length`. Defaults to ```[4, 8, 8]```.
-    mode (str):
-        Output mode of the WaveRNN vocoder. `mold` for Mixture of Logistic Distribution, `gauss` for a single
-        Gaussian Distribution and `bits` for quantized bits as the model's output.
-    mulaw (bool):
-        enable / disable the use of Mulaw quantization for training. Only applicable if `mode == 'bits'`. Defaults
-        to `True`.
-    pad (int):
-            Padding applied to the input feature frames against the convolution layers of the feature network.
-            Defaults to 2.
-    """
-
-    rnn_dims: int = 512
-    fc_dims: int = 512
-    compute_dims: int = 128
-    res_out_dims: int = 128
-    num_res_blocks: int = 10
-    use_aux_net: bool = True
-    use_upsample_net: bool = True
-    upsample_factors: list[int] = field(default_factory=lambda: [4, 8, 8])
-    mode: str = "mold"  # mold [string], gauss [string], bits [int]
-    mulaw: bool = True  # apply mulaw if mode is bits
-    pad: int = 2
-    feat_dims: int = 80
-
-
 class Wavernn(BaseVocoder):
+    config: WavernnConfig
+
     def __init__(self, config: Coqpit):
         """🐸 WaveRNN model.
         Original paper - https://arxiv.org/abs/1802.08435
         Official implementation - https://github.com/fatchord/WaveRNN
 
         Args:
-            config (Coqpit): [description]
+            config: WavernnConfig
 
         Raises:
             RuntimeError: [description]

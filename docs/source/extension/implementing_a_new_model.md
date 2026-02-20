@@ -88,11 +88,7 @@ class MyModel(BaseTTS):
 
     def __init__(self, config: Coqpit):
         super().__init__()
-        self._set_model_args(config)
-
-    def _set_model_args(self, config: Coqpit):
-        """Set model arguments from the config. Override this."""
-        pass
+        self._set_model_args()
 
     def forward(self, input: torch.Tensor, *args, aux_input={}, **kwargs) -> Dict:
         """Forward pass for the model mainly used in training.

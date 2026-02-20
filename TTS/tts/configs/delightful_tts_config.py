@@ -1,7 +1,78 @@
 from dataclasses import dataclass, field
 
+from coqpit import Coqpit
+
+from TTS.config.shared_configs import BaseAudioConfig, ModelArgs
 from TTS.tts.configs.shared_configs import BaseTTSConfig
-from TTS.tts.models.delightful_tts import DelightfulTtsArgs, DelightfulTtsAudioConfig, VocoderConfig
+
+
+@dataclass
+class VocoderConfig(Coqpit):
+    resblock_type_decoder: str = "1"
+    resblock_kernel_sizes_decoder: list[int] = field(default_factory=lambda: [3, 7, 11])
+    resblock_dilation_sizes_decoder: list[list[int]] = field(default_factory=lambda: [[1, 3, 5], [1, 3, 5], [1, 3, 5]])
+    upsample_rates_decoder: list[int] = field(default_factory=lambda: [8, 8, 2, 2])
+    upsample_initial_channel_decoder: int = 512
+    upsample_kernel_sizes_decoder: list[int] = field(default_factory=lambda: [16, 16, 4, 4])
+    use_spectral_norm_discriminator: bool = False
+    upsampling_rates_discriminator: list[int] = field(default_factory=lambda: [4, 4, 4, 4])
+    periods_discriminator: list[int] = field(default_factory=lambda: [2, 3, 5, 7, 11])
+    pretrained_model_path: str | None = None
+
+
+@dataclass
+class DelightfulTtsAudioConfig(BaseAudioConfig):
+    mel_fmax: float = 8000
+    num_mels: int = 100
+
+
+@dataclass
+class DelightfulTtsArgs(ModelArgs):
+    num_chars: int = 100
+    spec_segment_size: int = 32
+    n_hidden_conformer_encoder: int = 512
+    n_layers_conformer_encoder: int = 6
+    n_heads_conformer_encoder: int = 8
+    dropout_conformer_encoder: float = 0.1
+    kernel_size_conv_mod_conformer_encoder: int = 7
+    kernel_size_depthwise_conformer_encoder: int = 7
+    lrelu_slope: float = 0.3
+    n_hidden_conformer_decoder: int = 512
+    n_layers_conformer_decoder: int = 6
+    n_heads_conformer_decoder: int = 8
+    dropout_conformer_decoder: float = 0.1
+    kernel_size_conv_mod_conformer_decoder: int = 11
+    kernel_size_depthwise_conformer_decoder: int = 11
+    bottleneck_size_p_reference_encoder: int = 4
+    bottleneck_size_u_reference_encoder: int = 512
+    ref_enc_filters_reference_encoder = [32, 32, 64, 64, 128, 128]
+    ref_enc_size_reference_encoder: int = 3
+    ref_enc_strides_reference_encoder = [1, 2, 1, 2, 1]
+    ref_enc_pad_reference_encoder = [1, 1]
+    ref_enc_gru_size_reference_encoder: int = 32
+    ref_attention_dropout_reference_encoder: float = 0.2
+    token_num_reference_encoder: int = 32
+    predictor_kernel_size_reference_encoder: int = 5
+    n_hidden_variance_adaptor: int = 512
+    kernel_size_variance_adaptor: int = 5
+    dropout_variance_adaptor: float = 0.5
+    n_bins_variance_adaptor: int = 256
+    emb_kernel_size_variance_adaptor: int = 3
+    use_speaker_embedding: bool = False
+    num_speakers: int = 0
+    speakers_file: str = None
+    d_vector_file: str = None
+    speaker_embedding_channels: int = 384
+    use_d_vector_file: bool = False
+    d_vector_dim: int = 0
+    freeze_vocoder: bool = False
+    freeze_text_encoder: bool = False
+    freeze_duration_predictor: bool = False
+    freeze_pitch_predictor: bool = False
+    freeze_energy_predictor: bool = False
+    freeze_basis_vectors_predictor: bool = False
+    freeze_decoder: bool = False
+    length_scale: float = 1.0
 
 
 @dataclass
@@ -56,7 +127,6 @@ class DelightfulTTSConfig(BaseTTSConfig):
         use_speaker_embedding (bool): Whether to use speaker embedding.
         speakers_file (str): Path to the speaker file.
         speaker_embedding_channels (int): Number of channels for the speaker embedding.
-        language_ids_file (str): Path to the language IDs file.
     """
 
     model: str = "delightful_tts"
@@ -130,8 +200,6 @@ class DelightfulTTSConfig(BaseTTSConfig):
     use_speaker_embedding: bool = False
     speakers_file: str = None
     speaker_embedding_channels: int = 256
-    language_ids_file: str = None
-    use_language_embedding: bool = False
 
     # use d-vectors
     use_d_vector_file: bool = False

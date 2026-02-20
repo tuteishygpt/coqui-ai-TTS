@@ -1,12 +1,18 @@
 import os
 from dataclasses import dataclass, field
 
+from coqpit import Coqpit
 from trainer.io import get_user_data_dir
 
 from TTS.tts.configs.shared_configs import BaseTTSConfig
 from TTS.tts.layers.bark.model import GPTConfig
 from TTS.tts.layers.bark.model_fine import FineGPTConfig
-from TTS.tts.models.bark import BarkAudioConfig
+
+
+@dataclass
+class BarkAudioConfig(Coqpit):
+    sample_rate: int = 24000
+    output_sample_rate: int = 24000
 
 
 @dataclass

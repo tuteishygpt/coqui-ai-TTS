@@ -78,8 +78,6 @@ def create_argparser() -> argparse.ArgumentParser:
 # parse the args
 args = create_argparser().parse_args()
 
-manager = ModelManager(models_file=TTS.get_models_file_path())
-
 # update in-use models to the specified released models.
 model_path = None
 config_path = None
@@ -89,7 +87,7 @@ vocoder_config_path = None
 
 # CASE1: list pre-trained TTS models
 if args.list_models:
-    manager.list_models()
+    ModelManager().list_models()
     sys.exit(0)
 
 device = args.device

@@ -3,9 +3,14 @@ import os
 from trainer import Trainer, TrainerArgs
 
 from TTS.config.shared_configs import BaseDatasetConfig
-from TTS.tts.configs.delightful_tts_config import DelightfulTtsAudioConfig, DelightfulTTSConfig
+from TTS.tts.configs.delightful_tts_config import (
+    DelightfulTtsArgs,
+    DelightfulTtsAudioConfig,
+    DelightfulTTSConfig,
+    VocoderConfig,
+)
 from TTS.tts.datasets import load_tts_samples
-from TTS.tts.models.delightful_tts import DelightfulTTS, DelightfulTtsArgs, VocoderConfig
+from TTS.tts.models.delightful_tts import DelightfulTTS
 from TTS.tts.utils.text.tokenizer import TTSTokenizer
 from TTS.utils.audio.processor import AudioProcessor
 

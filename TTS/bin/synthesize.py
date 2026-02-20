@@ -331,7 +331,7 @@ def main(arg_list: list[str] | None = None) -> None:
         from TTS.utils.manage import ModelManager
 
         # load model manager
-        manager = ModelManager(models_file=TTS.get_models_file_path(), progress_bar=args.progress_bar)
+        manager = ModelManager(progress_bar=args.progress_bar)
 
         tts_path = None
         tts_config_path = None
@@ -343,7 +343,6 @@ def main(arg_list: list[str] | None = None) -> None:
         encoder_config_path = None
         vc_path = None
         vc_config_path = None
-        model_dir = None
 
         # 0) Print version number
         if args.version:

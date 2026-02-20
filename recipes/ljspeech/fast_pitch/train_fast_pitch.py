@@ -2,8 +2,10 @@ import os
 
 from trainer import Trainer, TrainerArgs
 
+from TTS.bin.compute_attention_masks import compute_attention_masks
 from TTS.config.shared_configs import BaseAudioConfig, BaseDatasetConfig
 from TTS.tts.configs.fast_pitch_config import FastPitchConfig
+from TTS.tts.configs.forward_tts_config import ForwardTTSArgs
 from TTS.tts.datasets import load_tts_samples
 from TTS.tts.models.forward_tts import ForwardTTS
 from TTS.tts.utils.text.tokenizer import TTSTokenizer
@@ -14,11 +16,13 @@ output_path = os.path.dirname(os.path.abspath(__file__))
 
 
 def main():
+    use_aligner = True  # learned alignments
+
     # init configs
     dataset_config = BaseDatasetConfig(
         formatter="ljspeech",
         meta_file_train="metadata.csv",
-        # meta_file_attn_mask=os.path.join(output_path, "../LJSpeech-1.1/metadata_attn_mask.txt"),
+        meta_file_attn_mask=os.path.join(output_path, "../LJSpeech-1.1/metadata_attn_mask.txt") if use_aligner else "",
         path=os.path.join(output_path, "../LJSpeech-1.1/"),
     )
 
@@ -37,6 +41,7 @@ def main():
 
     config = FastPitchConfig(
         run_name="fast_pitch_ljspeech",
+        model_args=ForwardTTSArgs(use_aligner=use_aligner),
         audio=audio_config,
         batch_size=32,
         eval_batch_size=16,
@@ -62,13 +67,10 @@ def main():
     )
 
     # compute alignments
-    if not config.model_args.use_aligner:
+    if not use_aligner:
         manager = ModelManager()
         model_path, config_path, _ = manager.download_model("tts_models/en/ljspeech/tacotron2-DCA")
-        # TODO: make compute_attention python callable
-        os.system(
-            f"python TTS/bin/compute_attention_masks.py --model_path {model_path} --config_path {config_path} --dataset ljspeech --dataset_metafile metadata.csv --data_path ./recipes/ljspeech/LJSpeech-1.1/  --use_cuda"
-        )
+        compute_attention_masks(model_path, config_path, "recipes/ljspeech/LJSpeech-1.1")
 
     # INITIALIZE THE AUDIO PROCESSOR
     # Audio processor is used for feature extraction and audio I/O.

@@ -49,6 +49,8 @@ class KNNVC(CloningMixin, BaseVC):
         >>> model = KNNVC(config)
     """
 
+    config: KNNVCConfig
+
     def __init__(self, config: Coqpit):
         super().__init__(config)
         self.ssl_dim = self.args.ssl_dim

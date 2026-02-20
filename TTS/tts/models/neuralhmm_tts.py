@@ -3,10 +3,12 @@ import os
 from typing import Any
 
 import torch
+from coqpit import Coqpit
 from torch import nn
 from trainer.logging.base_dash_logger import BaseDashboardLogger
 from trainer.logging.tensorboard_logger import TensorboardLogger
 
+from TTS.tts.configs.neuralhmm_tts_config import NeuralhmmTTSConfig
 from TTS.tts.layers.losses import NLLLoss
 from TTS.tts.layers.overflow.common_layers import Encoder, OverflowUtils
 from TTS.tts.layers.overflow.neural_hmm import NeuralHMM
@@ -65,9 +67,11 @@ class NeuralhmmTTS(BaseTTS):
     Check :class:`TTS.tts.configs.neuralhmm_tts_config.NeuralhmmTTSConfig` for class arguments.
     """
 
+    config: NeuralhmmTTSConfig
+
     def __init__(
         self,
-        config: "NeuralhmmTTSConfig",
+        config: Coqpit,
         ap: "AudioProcessor" = None,
         tokenizer: "TTSTokenizer" = None,
         speaker_manager: SpeakerManager = None,
@@ -76,7 +80,6 @@ class NeuralhmmTTS(BaseTTS):
 
         # pass all config fields to `self`
         # for fewer code change
-        self.config = config
         for key in config:
             setattr(self, key, config[key])
 

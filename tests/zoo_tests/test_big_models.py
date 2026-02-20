@@ -45,7 +45,7 @@ def test_xtts(tmp_path):
 
 
 @pytest.mark.skipif(GITHUB_ACTIONS, reason="Model too big for CI")
-def test_xtts_streaming(manager):
+def test_xtts_streaming(manager, device: torch.device):
     """Testing the new inference_stream method"""
     from TTS.tts.configs.xtts_config import XttsConfig
     from TTS.tts.models.xtts import Xtts
@@ -58,7 +58,7 @@ def test_xtts_streaming(manager):
     config.load_json(model_path / "config.json")
     model = Xtts.init_from_config(config)
     model.load_checkpoint(config, checkpoint_dir=str(model_path))
-    model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    model.to(device)
 
     print("Computing speaker latents...")
     gpt_cond_latent, speaker_embedding = model.get_conditioning_latents(audio_path=speaker_wav)
@@ -101,7 +101,7 @@ def test_xtts_v2(tmp_path):
 
 
 @pytest.mark.skipif(GITHUB_ACTIONS, reason="Model too big for CI")
-def test_xtts_v2_streaming(manager):
+def test_xtts_v2_streaming(manager, device: torch.device):
     """Testing the new inference_stream method"""
     from TTS.tts.configs.xtts_config import XttsConfig
     from TTS.tts.models.xtts import Xtts
@@ -112,7 +112,7 @@ def test_xtts_v2_streaming(manager):
     config.load_json(model_path / "config.json")
     model = Xtts.init_from_config(config)
     model.load_checkpoint(config, checkpoint_dir=str(model_path))
-    model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    model.to(device)
 
     print("Computing speaker latents...")
     gpt_cond_latent, speaker_embedding = model.get_conditioning_latents(audio_path=speaker_wav)

@@ -40,7 +40,7 @@ XTTS-v2 supports 17 languages:
 - Turkish (tr)
 
 ## License
-This model is licensed under [Coqui Public Model License](https://coqui.ai/cpml).
+This model is licensed under [Coqui Public Model License](https://tts-hub.github.io/cpml).
 
 ## Contact
 Come and join in our 🐸Community. We're active on [Discord](https://discord.gg/fBC58unbKE) and [GitHub](https://github.com/idiap/coqui-ai-TTS/discussions).
@@ -56,11 +56,12 @@ You can check all supported languages with the following command:
     --list_language_idx
 ```
 
-You can check all Coqui available speakers with the following command:
+You can check all available Coqui speakers with the following command:
 
 ```console
- tts --model_name tts_models/multilingual/multi-dataset/xtts_v2 \
-    --list_speaker_idx
+>>> tts --model_name tts_models/multilingual/multi-dataset/xtts_v2 \
+        --list_speaker_idx
+['Claribel Dervla', 'Daisy Studious', 'Gracie Wise', 'Tammie Ema', 'Alison Dietlinde', 'Ana Florence', 'Annmarie Nele', 'Asya Anara', 'Brenda Stern', 'Gitta Nikolina', 'Henriette Usha', 'Sofia Hellen', 'Tammy Grit', 'Tanja Adelina', 'Vjollca Johnnie', 'Andrew Chipper', 'Badr Odhiambo', 'Dionisio Schuyler', 'Royston Min', 'Viktor Eka', 'Abrahan Mack', 'Adde Michal', 'Baldur Sanjin', 'Craig Gutsy', 'Damien Black', 'Gilberto Mathias', 'Ilkin Urbano', 'Kazuhiko Atallah', 'Ludvig Milivoj', 'Suad Qasim', 'Torcull Diarmuid', 'Viktor Menelaos', 'Zacharie Aimilios', 'Nova Hogarth', 'Maja Ruoho', 'Uta Obando', 'Lidiya Szekeres', 'Chandra MacFarland', 'Szofi Granger', 'Camilla Holmström', 'Lilya Stainthorpe', 'Zofija Kendrick', 'Narelle Moon', 'Barbora MacLean', 'Alexandra Hisakawa', 'Alma María', 'Rosemary Okafor', 'Ige Behringer', 'Filip Traverse', 'Damjan Chapman', 'Wulf Carlevaro', 'Aaron Dreschner', 'Kumar Dahl', 'Eugenio Mataracı', 'Ferran Simen', 'Xavier Hayasaka', 'Luis Moray', 'Marcos Rudaski']
 ```
 
 #### Coqui speakers
@@ -196,7 +197,10 @@ pip install deepspeed
 - `gpt_cond_latent`: The latent vector you get with get_conditioning_latents. (You can cache for faster inference with same speaker)
 - `speaker_embedding`: The speaker embedding you get with get_conditioning_latents. (You can cache for faster inference with same speaker)
 - `temperature`: The softmax temperature of the autoregressive model. Defaults to 0.65.
-- `length_penalty`: A length penalty applied to the autoregressive decoder. Higher settings causes the model to produce more terse outputs. Defaults to 1.0.
+- `length_penalty`: Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
+   the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
+   likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
+   `length_penalty` < 0.0 encourages shorter sequences. Defaults to 1.0.
 - `repetition_penalty`: A penalty that prevents the autoregressive decoder from repeating itself during decoding. Can be used to reduce the incidence of long silences or "uhhhhhhs", etc. Defaults to 2.0.
 - `top_k`: Lower values mean the decoder produces more "likely" (aka boring) outputs. Defaults to 50.
 - `top_p`: Lower values mean the decoder produces more "likely" (aka boring) outputs. Defaults to 0.8.
@@ -399,7 +403,7 @@ torchaudio.save(OUTPUT_WAV_PATH, torch.tensor(out["wav"]).unsqueeze(0), 24000)
 
 ## XttsArgs
 ```{eval-rst}
-.. autoclass:: TTS.tts.models.xtts.XttsArgs
+.. autoclass:: TTS.tts.configs.xtts_config.XttsArgs
     :members:
 ```
 

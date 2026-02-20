@@ -10,14 +10,14 @@ from trainer.io import load_fsspec
 from trainer.torch import DistributedSampler
 from trainer.trainer_utils import get_optimizer, get_scheduler
 
-from TTS.tts.configs.xtts_config import XttsConfig
+from TTS.tts.configs.xtts_config import XttsArgs, XttsConfig
 from TTS.tts.datasets.dataset import TTSDataset
 from TTS.tts.layers.tortoise.arch_utils import TorchMelSpectrogram
 from TTS.tts.layers.xtts.dvae import DiscreteVAE
 from TTS.tts.layers.xtts.tokenizer import VoiceBpeTokenizer
 from TTS.tts.layers.xtts.trainer.dataset import XTTSDataset
 from TTS.tts.models.base_tts import BaseTTS
-from TTS.tts.models.xtts import Xtts, XttsArgs
+from TTS.tts.models.xtts import Xtts
 from TTS.utils.generic_utils import is_pytorch_at_least_2_4
 
 logger = logging.getLogger(__name__)
@@ -65,12 +65,13 @@ def callback_clearml_load_save(operation_type, model_info):
 
 
 class GPTTrainer(BaseTTS):
+    config: XttsConfig
+
     def __init__(self, config: Coqpit):
         """
-        Tortoise GPT training class
+        XTTS GPT training class
         """
         super().__init__(config, ap=None, tokenizer=None)
-        self.config = config
         # init XTTS model
         self.xtts = Xtts(self.config)
         # create the tokenizer with the target vocabulary
@@ -361,42 +362,39 @@ class GPTTrainer(BaseTTS):
         num_gpus: int,
         rank: int | None = None,
     ) -> "DataLoader":  # pylint: disable=W0613
-        if is_eval and not config.run_eval:
-            loader = None
+        # init dataloader
+        dataset = XTTSDataset(self.config, samples, self.xtts.tokenizer, config.audio.sample_rate, is_eval)
+
+        # wait all the DDP process to be ready
+        if num_gpus > 1:
+            torch.distributed.barrier()
+
+        # sort input sequences from short to long
+        # dataset.preprocess_samples()
+
+        # get samplers
+        sampler = self.get_sampler(dataset, num_gpus)
+
+        # ignore sampler when is eval because if we changed the sampler parameter we will not be able to compare previous runs
+        if sampler is None or is_eval:
+            loader = DataLoader(
+                dataset,
+                batch_size=config.eval_batch_size if is_eval else config.batch_size,
+                shuffle=False,
+                drop_last=False,
+                collate_fn=dataset.collate_fn,
+                num_workers=config.num_eval_loader_workers if is_eval else config.num_loader_workers,
+                pin_memory=False,
+            )
         else:
-            # init dataloader
-            dataset = XTTSDataset(self.config, samples, self.xtts.tokenizer, config.audio.sample_rate, is_eval)
-
-            # wait all the DDP process to be ready
-            if num_gpus > 1:
-                torch.distributed.barrier()
-
-            # sort input sequences from short to long
-            # dataset.preprocess_samples()
-
-            # get samplers
-            sampler = self.get_sampler(dataset, num_gpus)
-
-            # ignore sampler when is eval because if we changed the sampler parameter we will not be able to compare previous runs
-            if sampler is None or is_eval:
-                loader = DataLoader(
-                    dataset,
-                    batch_size=config.eval_batch_size if is_eval else config.batch_size,
-                    shuffle=False,
-                    drop_last=False,
-                    collate_fn=dataset.collate_fn,
-                    num_workers=config.num_eval_loader_workers if is_eval else config.num_loader_workers,
-                    pin_memory=False,
-                )
-            else:
-                loader = DataLoader(
-                    dataset,
-                    sampler=sampler,
-                    batch_size=config.eval_batch_size if is_eval else config.batch_size,
-                    collate_fn=dataset.collate_fn,
-                    num_workers=config.num_eval_loader_workers if is_eval else config.num_loader_workers,
-                    pin_memory=False,
-                )
+            loader = DataLoader(
+                dataset,
+                sampler=sampler,
+                batch_size=config.eval_batch_size if is_eval else config.batch_size,
+                collate_fn=dataset.collate_fn,
+                num_workers=config.num_eval_loader_workers if is_eval else config.num_loader_workers,
+                pin_memory=False,
+            )
         return loader
 
     def get_optimizer(self) -> list:

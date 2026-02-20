@@ -1,7 +1,7 @@
 import logging
 import math
 import os
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from itertools import chain
 from pathlib import Path
 from typing import Any, Union
@@ -21,6 +21,7 @@ from trainer.torch import DistributedSampler, DistributedSamplerWrapper
 from trainer.trainer_utils import get_optimizer, get_scheduler
 
 from TTS.tts.configs.shared_configs import CharactersConfig
+from TTS.tts.configs.vits_config import VitsArgs, VitsConfig
 from TTS.tts.datasets.dataset import TTSDataset, _parse_sample, get_attribute_balancer_weights
 from TTS.tts.layers.glow_tts.duration_predictor import DurationPredictor
 from TTS.tts.layers.vits.discriminator import VitsDiscriminator
@@ -74,22 +75,6 @@ def load_audio(file_path):
     return x, sr
 
 
-#############################
-# CONFIGS
-#############################
-
-
-@dataclass
-class VitsAudioConfig(Coqpit):
-    fft_size: int = 1024
-    sample_rate: int = 22050
-    win_length: int = 1024
-    hop_length: int = 256
-    num_mels: int = 80
-    mel_fmin: int = 0
-    mel_fmax: int = None
-
-
 ##############################
 # DATASET
 ##############################
@@ -101,7 +86,7 @@ class VitsDataset(TTSDataset):
         self.pad_id = self.tokenizer.characters.pad_id
         self.model_args = model_args
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> dict[str, Any]:
         item = self.samples[idx]
         raw_text = item["text"]
 
@@ -204,244 +189,6 @@ class VitsDataset(TTSDataset):
 ##############################
 
 
-@dataclass
-class VitsArgs(Coqpit):
-    """VITS model arguments.
-
-    Args:
-
-        num_chars (int):
-            Number of characters in the vocabulary. Defaults to 100.
-
-        out_channels (int):
-            Number of output channels of the decoder. Defaults to 513.
-
-        spec_segment_size (int):
-            Decoder input segment size. Defaults to 32 `(32 * hoplength = waveform length)`.
-
-        hidden_channels (int):
-            Number of hidden channels of the model. Defaults to 192.
-
-        hidden_channels_ffn_text_encoder (int):
-            Number of hidden channels of the feed-forward layers of the text encoder transformer. Defaults to 256.
-
-        num_heads_text_encoder (int):
-            Number of attention heads of the text encoder transformer. Defaults to 2.
-
-        num_layers_text_encoder (int):
-            Number of transformer layers in the text encoder. Defaults to 6.
-
-        kernel_size_text_encoder (int):
-            Kernel size of the text encoder transformer FFN layers. Defaults to 3.
-
-        dropout_p_text_encoder (float):
-            Dropout rate of the text encoder. Defaults to 0.1.
-
-        dropout_p_duration_predictor (float):
-            Dropout rate of the duration predictor. Defaults to 0.1.
-
-        kernel_size_posterior_encoder (int):
-            Kernel size of the posterior encoder's WaveNet layers. Defaults to 5.
-
-        dilatation_posterior_encoder (int):
-            Dilation rate of the posterior encoder's WaveNet layers. Defaults to 1.
-
-        num_layers_posterior_encoder (int):
-            Number of posterior encoder's WaveNet layers. Defaults to 16.
-
-        kernel_size_flow (int):
-            Kernel size of the Residual Coupling layers of the flow network. Defaults to 5.
-
-        dilatation_flow (int):
-            Dilation rate of the Residual Coupling WaveNet layers of the flow network. Defaults to 1.
-
-        num_layers_flow (int):
-            Number of Residual Coupling WaveNet layers of the flow network. Defaults to 6.
-
-        resblock_type_decoder (str):
-            Type of the residual block in the decoder network. Defaults to "1".
-
-        resblock_kernel_sizes_decoder (List[int]):
-            Kernel sizes of the residual blocks in the decoder network. Defaults to `[3, 7, 11]`.
-
-        resblock_dilation_sizes_decoder (List[List[int]]):
-            Dilation sizes of the residual blocks in the decoder network. Defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`.
-
-        upsample_rates_decoder (List[int]):
-            Upsampling rates for each concecutive upsampling layer in the decoder network. The multiply of these
-            values must be equal to the kop length used for computing spectrograms. Defaults to `[8, 8, 2, 2]`.
-
-        upsample_initial_channel_decoder (int):
-            Number of hidden channels of the first upsampling convolution layer of the decoder network. Defaults to 512.
-
-        upsample_kernel_sizes_decoder (List[int]):
-            Kernel sizes for each upsampling layer of the decoder network. Defaults to `[16, 16, 4, 4]`.
-
-        periods_multi_period_discriminator (List[int]):
-            Periods values for Vits Multi-Period Discriminator. Defaults to `[2, 3, 5, 7, 11]`.
-
-        use_sdp (bool):
-            Use Stochastic Duration Predictor. Defaults to True.
-
-        noise_scale (float):
-            Noise scale used for the sample noise tensor in training. Defaults to 1.0.
-
-        inference_noise_scale (float):
-            Noise scale used for the sample noise tensor in inference. Defaults to 0.667.
-
-        length_scale (float):
-            Scale factor for the predicted duration values. Smaller values result faster speech. Defaults to 1.
-
-        noise_scale_dp (float):
-            Noise scale used by the Stochastic Duration Predictor sample noise in training. Defaults to 1.0.
-
-        inference_noise_scale_dp (float):
-            Noise scale for the Stochastic Duration Predictor in inference. Defaults to 0.8.
-
-        max_inference_len (int):
-            Maximum inference length to limit the memory use. Defaults to None.
-
-        init_discriminator (bool):
-            Initialize the disciminator network if set True. Set False for inference. Defaults to True.
-
-        use_spectral_norm_disriminator (bool):
-            Use spectral normalization over weight norm in the discriminator. Defaults to False.
-
-        use_speaker_embedding (bool):
-            Enable/Disable speaker embedding for multi-speaker models. Defaults to False.
-
-        num_speakers (int):
-            Number of speakers for the speaker embedding layer. Defaults to 0.
-
-        speakers_file (str):
-            Path to the speaker mapping file for the Speaker Manager. Defaults to None.
-
-        speaker_embedding_channels (int):
-            Number of speaker embedding channels. Defaults to 256.
-
-        use_d_vector_file (bool):
-            Enable/Disable the use of d-vectors for multi-speaker training. Defaults to False.
-
-        d_vector_file (List[str]):
-            List of paths to the files including pre-computed speaker embeddings. Defaults to None.
-
-        d_vector_dim (int):
-            Number of d-vector channels. Defaults to 0.
-
-        detach_dp_input (bool):
-            Detach duration predictor's input from the network for stopping the gradients. Defaults to True.
-
-        use_language_embedding (bool):
-            Enable/Disable language embedding for multilingual models. Defaults to False.
-
-        embedded_language_dim (int):
-            Number of language embedding channels. Defaults to 4.
-
-        num_languages (int):
-            Number of languages for the language embedding layer. Defaults to 0.
-
-        language_ids_file (str):
-            Path to the language mapping file for the Language Manager. Defaults to None.
-
-        use_speaker_encoder_as_loss (bool):
-            Enable/Disable Speaker Consistency Loss (SCL). Defaults to False.
-
-        speaker_encoder_config_path (str):
-            Path to the file speaker encoder config file, to use for SCL. Defaults to "".
-
-        speaker_encoder_model_path (str):
-            Path to the file speaker encoder checkpoint file, to use for SCL. Defaults to "".
-
-        condition_dp_on_speaker (bool):
-            Condition the duration predictor on the speaker embedding. Defaults to True.
-
-        freeze_encoder (bool):
-            Freeze the encoder weigths during training. Defaults to False.
-
-        freeze_DP (bool):
-            Freeze the duration predictor weigths during training. Defaults to False.
-
-        freeze_PE (bool):
-            Freeze the posterior encoder weigths during training. Defaults to False.
-
-        freeze_flow_encoder (bool):
-            Freeze the flow encoder weigths during training. Defaults to False.
-
-        freeze_waveform_decoder (bool):
-            Freeze the waveform decoder weigths during training. Defaults to False.
-
-        encoder_sample_rate (int):
-            If not None this sample rate will be used for training the Posterior Encoder,
-            flow, text_encoder and duration predictor. The decoder part (vocoder) will be
-            trained with the `config.audio.sample_rate`. Defaults to None.
-
-        interpolate_z (bool):
-            If `encoder_sample_rate` not None and  this parameter True the nearest interpolation
-            will be used to upsampling the latent variable z with the sampling rate `encoder_sample_rate`
-            to the `config.audio.sample_rate`. If it is False you will need to add extra
-            `upsample_rates_decoder` to match the shape. Defaults to True.
-
-    """
-
-    num_chars: int = 100
-    out_channels: int = 513
-    spec_segment_size: int = 32
-    hidden_channels: int = 192
-    hidden_channels_ffn_text_encoder: int = 768
-    num_heads_text_encoder: int = 2
-    num_layers_text_encoder: int = 6
-    kernel_size_text_encoder: int = 3
-    dropout_p_text_encoder: float = 0.1
-    dropout_p_duration_predictor: float = 0.5
-    kernel_size_posterior_encoder: int = 5
-    dilation_rate_posterior_encoder: int = 1
-    num_layers_posterior_encoder: int = 16
-    kernel_size_flow: int = 5
-    dilation_rate_flow: int = 1
-    num_layers_flow: int = 4
-    resblock_type_decoder: str = "1"
-    resblock_kernel_sizes_decoder: list[int] = field(default_factory=lambda: [3, 7, 11])
-    resblock_dilation_sizes_decoder: list[list[int]] = field(default_factory=lambda: [[1, 3, 5], [1, 3, 5], [1, 3, 5]])
-    upsample_rates_decoder: list[int] = field(default_factory=lambda: [8, 8, 2, 2])
-    upsample_initial_channel_decoder: int = 512
-    upsample_kernel_sizes_decoder: list[int] = field(default_factory=lambda: [16, 16, 4, 4])
-    periods_multi_period_discriminator: list[int] = field(default_factory=lambda: [2, 3, 5, 7, 11])
-    use_sdp: bool = True
-    noise_scale: float = 1.0
-    inference_noise_scale: float = 0.667
-    length_scale: float = 1
-    noise_scale_dp: float = 1.0
-    inference_noise_scale_dp: float = 1.0
-    max_inference_len: int = None
-    init_discriminator: bool = True
-    use_spectral_norm_disriminator: bool = False
-    use_speaker_embedding: bool = False
-    num_speakers: int = 0
-    speakers_file: str = None
-    d_vector_file: list[str] = None
-    speaker_embedding_channels: int = 256
-    use_d_vector_file: bool = False
-    d_vector_dim: int = 0
-    detach_dp_input: bool = True
-    use_language_embedding: bool = False
-    embedded_language_dim: int = 4
-    num_languages: int = 0
-    language_ids_file: str = None
-    use_speaker_encoder_as_loss: bool = False
-    speaker_encoder_config_path: str = ""
-    speaker_encoder_model_path: str = ""
-    condition_dp_on_speaker: bool = True
-    freeze_encoder: bool = False
-    freeze_DP: bool = False
-    freeze_PE: bool = False
-    freeze_flow_decoder: bool = False
-    freeze_waveform_decoder: bool = False
-    encoder_sample_rate: int = None
-    interpolate_z: bool = True
-    reinit_DP: bool = False
-    reinit_text_encoder: bool = False
-
-
 class Vits(BaseTTS):
     """VITS TTS model
 
@@ -469,6 +216,9 @@ class Vits(BaseTTS):
         >>> config = VitsConfig()
         >>> model = Vits(config)
     """
+
+    config: VitsConfig
+    args: VitsArgs
 
     def __init__(
         self,
@@ -629,7 +379,7 @@ class Vits(BaseTTS):
             config (Coqpit): Model configuration.
         """
         if self.args.language_ids_file is not None:
-            self.language_manager = LanguageManager(language_ids_file_path=config.language_ids_file)
+            self.language_manager = LanguageManager(language_ids_file_path=self.args.language_ids_file)
 
         if self.args.use_language_embedding and self.language_manager:
             logger.info("Initialization of language-embedding layers.")
@@ -703,42 +453,6 @@ class Vits(BaseTTS):
         if self.args.freeze_waveform_decoder:
             for param in self.waveform_decoder.parameters():
                 param.requires_grad = False
-
-    @staticmethod
-    def _set_cond_input(aux_input: dict):
-        """Set the speaker conditioning input based on the multi-speaker mode."""
-        sid, g, lid, durations = None, None, None, None
-        if "speaker_ids" in aux_input and aux_input["speaker_ids"] is not None:
-            sid = aux_input["speaker_ids"]
-            if sid.ndim == 0:
-                sid = sid.unsqueeze_(0)
-        if "d_vectors" in aux_input and aux_input["d_vectors"] is not None:
-            g = F.normalize(aux_input["d_vectors"]).unsqueeze(-1)
-            if g.ndim == 2:
-                g = g.unsqueeze_(0)
-
-        if "language_ids" in aux_input and aux_input["language_ids"] is not None:
-            lid = aux_input["language_ids"]
-            if lid.ndim == 0:
-                lid = lid.unsqueeze_(0)
-
-        if "durations" in aux_input and aux_input["durations"] is not None:
-            durations = aux_input["durations"]
-
-        return sid, g, lid, durations
-
-    def _set_speaker_input(self, aux_input: dict):
-        d_vectors = aux_input.get("d_vectors", None)
-        speaker_ids = aux_input.get("speaker_ids", None)
-
-        if d_vectors is not None and speaker_ids is not None:
-            raise ValueError("[!] Cannot use d-vectors and speaker-ids together.")
-
-        if speaker_ids is not None and not hasattr(self, "emb_g"):
-            raise ValueError("[!] Cannot use speaker-ids without enabling speaker embedding.")
-
-        g = speaker_ids if speaker_ids is not None else d_vectors
-        return g
 
     def forward_mas(self, outputs, z_p, m_p, logs_p, x, x_mask, y_mask, g, lang_emb):
         # find the alignment path
@@ -839,13 +553,11 @@ class Vits(BaseTTS):
             - syn_spk_emb: :math:`[B, 1, speaker_encoder.proj_dim]`
         """
         outputs = {}
-        sid, g, lid, _ = self._set_cond_input(aux_input)
-        # speaker embedding
-        if self.args.use_speaker_embedding and sid is not None:
-            g = self.emb_g(sid).unsqueeze(-1)  # [b, h, 1]
+        g = self._get_speaker_conditioning(aux_input, "emb_g", normalize_embedding=False)
 
         # language embedding
         lang_emb = None
+        lid = aux_input.get("language_ids")
         if self.args.use_language_embedding and lid is not None:
             lang_emb = self.emb_l(lid).unsqueeze(-1)
 
@@ -943,20 +655,18 @@ class Vits(BaseTTS):
             - m_p: :math:`[B, C, T_dec]`
             - logs_p: :math:`[B, C, T_dec]`
         """
-        sid, g, lid, durations = self._set_cond_input(aux_input)
+        g = self._get_speaker_conditioning(aux_input, "emb_g", normalize_embedding=False)
         x_lengths = self._set_x_lengths(x, aux_input)
-
-        # speaker embedding
-        if self.args.use_speaker_embedding and sid is not None:
-            g = self.emb_g(sid).unsqueeze(-1)
 
         # language embedding
         lang_emb = None
+        lid = aux_input.get("language_ids")
         if self.args.use_language_embedding and lid is not None:
             lang_emb = self.emb_l(lid).unsqueeze(-1)
 
         x, m_p, logs_p, x_mask = self.text_encoder(x, x_lengths, lang_emb=lang_emb)
 
+        durations = aux_input.get("durations")
         if durations is None:
             if self.args.use_sdp:
                 logw = self.duration_predictor(
@@ -1344,61 +1054,58 @@ class Vits(BaseTTS):
         num_gpus: int,
         rank: int | None = None,
     ) -> "DataLoader":
-        if is_eval and not config.run_eval:
-            loader = None
-        else:
-            # init dataloader
-            dataset = VitsDataset(
-                model_args=self.args,
-                samples=samples,
-                batch_group_size=0 if is_eval else config.batch_group_size * config.batch_size,
-                min_text_len=config.min_text_len,
-                max_text_len=config.max_text_len,
-                min_audio_len=config.min_audio_len,
-                max_audio_len=config.max_audio_len,
-                phoneme_cache_path=config.phoneme_cache_path,
-                precompute_num_workers=config.precompute_num_workers,
-                tokenizer=self.tokenizer,
-                start_by_longest=config.start_by_longest,
+        # init dataloader
+        dataset = VitsDataset(
+            model_args=self.args,
+            samples=samples,
+            batch_group_size=0 if is_eval else config.batch_group_size * config.batch_size,
+            min_text_len=config.min_text_len,
+            max_text_len=config.max_text_len,
+            min_audio_len=config.min_audio_len,
+            max_audio_len=config.max_audio_len,
+            phoneme_cache_path=config.phoneme_cache_path,
+            precompute_num_workers=config.precompute_num_workers,
+            tokenizer=self.tokenizer,
+            start_by_longest=config.start_by_longest,
+        )
+
+        # wait all the DDP process to be ready
+        if num_gpus > 1:
+            dist.barrier()
+
+        # sort input sequences from short to long
+        dataset.preprocess_samples()
+
+        # get samplers
+        sampler = self.get_sampler(config, dataset, num_gpus)
+        if sampler is None:
+            loader = DataLoader(
+                dataset,
+                batch_size=config.eval_batch_size if is_eval else config.batch_size,
+                shuffle=False,  # shuffle is done in the dataset.
+                collate_fn=dataset.collate_fn,
+                drop_last=False,  # setting this False might cause issues in AMP training.
+                num_workers=config.num_eval_loader_workers if is_eval else config.num_loader_workers,
+                pin_memory=False,
             )
-
-            # wait all the DDP process to be ready
+        else:
             if num_gpus > 1:
-                dist.barrier()
-
-            # sort input sequences from short to long
-            dataset.preprocess_samples()
-
-            # get samplers
-            sampler = self.get_sampler(config, dataset, num_gpus)
-            if sampler is None:
                 loader = DataLoader(
                     dataset,
+                    sampler=sampler,
                     batch_size=config.eval_batch_size if is_eval else config.batch_size,
-                    shuffle=False,  # shuffle is done in the dataset.
                     collate_fn=dataset.collate_fn,
-                    drop_last=False,  # setting this False might cause issues in AMP training.
                     num_workers=config.num_eval_loader_workers if is_eval else config.num_loader_workers,
                     pin_memory=False,
                 )
             else:
-                if num_gpus > 1:
-                    loader = DataLoader(
-                        dataset,
-                        sampler=sampler,
-                        batch_size=config.eval_batch_size if is_eval else config.batch_size,
-                        collate_fn=dataset.collate_fn,
-                        num_workers=config.num_eval_loader_workers if is_eval else config.num_loader_workers,
-                        pin_memory=False,
-                    )
-                else:
-                    loader = DataLoader(
-                        dataset,
-                        batch_sampler=sampler,
-                        collate_fn=dataset.collate_fn,
-                        num_workers=config.num_eval_loader_workers if is_eval else config.num_loader_workers,
-                        pin_memory=False,
-                    )
+                loader = DataLoader(
+                    dataset,
+                    batch_sampler=sampler,
+                    collate_fn=dataset.collate_fn,
+                    num_workers=config.num_eval_loader_workers if is_eval else config.num_loader_workers,
+                    pin_memory=False,
+                )
         return loader
 
     def get_optimizer(self) -> list:
@@ -1477,7 +1184,7 @@ class Vits(BaseTTS):
             self.eval()
             assert not self.training
 
-    def load_fairseq_checkpoint(self, config, checkpoint_dir, eval=False, strict=True):  # pylint: disable=unused-argument, redefined-builtin
+    def load_fairseq_checkpoint(self, config, checkpoint_path: Path, eval=False, strict=True):  # pylint: disable=unused-argument, redefined-builtin
         """Load VITS checkpoints released by fairseq here: https://github.com/facebookresearch/fairseq/tree/main/examples/mms
         Performs some changes for compatibility.
 
@@ -1492,11 +1199,8 @@ class Vits(BaseTTS):
 
         self.disc = None
         # set paths
-        checkpoint_dir = Path(checkpoint_dir)
+        checkpoint_dir = checkpoint_path.parent
         config_file = checkpoint_dir / "config.json"
-        checkpoint_file = checkpoint_dir / "model.pth"
-        if not checkpoint_file.is_file():
-            checkpoint_file = checkpoint_dir / "G_100000.pth"
         vocab_file = checkpoint_dir / "vocab.txt"
         # set config params
         with open(config_file, encoding="utf-8") as f:
@@ -1516,7 +1220,7 @@ class Vits(BaseTTS):
             use_eos_bos=False,
         )
         # load fairseq checkpoint
-        new_chk = rehash_fairseq_vits_checkpoint(checkpoint_file)
+        new_chk = rehash_fairseq_vits_checkpoint(checkpoint_path)
         self.load_state_dict(new_chk, strict=strict)
         if eval:
             self.eval()

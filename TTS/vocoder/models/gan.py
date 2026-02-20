@@ -10,6 +10,7 @@ from trainer.io import load_fsspec
 from trainer.trainer_utils import get_optimizer, get_scheduler
 
 from TTS.utils.audio import AudioProcessor
+from TTS.vocoder.configs.shared_configs import BaseGANVocoderConfig
 from TTS.vocoder.datasets.gan_dataset import GANDataset
 from TTS.vocoder.layers.losses import DiscriminatorLoss, GeneratorLoss
 from TTS.vocoder.models import setup_discriminator, setup_generator
@@ -18,6 +19,8 @@ from TTS.vocoder.utils.generic_utils import plot_results
 
 
 class GAN(BaseVocoder):
+    config: BaseGANVocoderConfig
+
     def __init__(self, config: Coqpit, ap: AudioProcessor = None):
         """Wrap a generator and a discriminator network. It provides a compatible interface for the trainer.
         It also helps mixing and matching different generator and disciminator networks easily.
@@ -36,9 +39,8 @@ class GAN(BaseVocoder):
             >>> model = GAN(config)
         """
         super().__init__(config)
-        self.config = config
-        self.model_g = setup_generator(config)
-        self.model_d = setup_discriminator(config)
+        self.model_g = setup_generator(self.config)
+        self.model_d = setup_discriminator(self.config)
         self.train_disc = False  # if False, train only the generator.
         self.y_hat_g = None  # the last generator prediction to be passed onto the discriminator
         self.ap = ap

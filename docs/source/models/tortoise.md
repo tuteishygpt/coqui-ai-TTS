@@ -85,7 +85,7 @@ tts --model_name  tts_models/en/multi-dataset/tortoise-v2 \
 
 ## TortoiseArgs
 ```{eval-rst}
-.. autoclass:: TTS.tts.models.tortoise.TortoiseArgs
+.. autoclass:: TTS.tts.configs.tortoise_config.TortoiseArgs
     :members:
 ```
 

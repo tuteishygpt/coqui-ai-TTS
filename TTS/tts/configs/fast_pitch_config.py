@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
+from TTS.tts.configs.forward_tts_config import ForwardTTSArgs
 from TTS.tts.configs.shared_configs import BaseTTSConfig
-from TTS.tts.models.forward_tts import ForwardTTSArgs
 
 
 @dataclass

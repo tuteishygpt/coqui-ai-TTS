@@ -8,6 +8,7 @@ from torch import nn
 from trainer.logging.base_dash_logger import BaseDashboardLogger
 from trainer.logging.tensorboard_logger import TensorboardLogger
 
+from TTS.tts.configs.overflow_config import OverflowConfig
 from TTS.tts.layers.losses import NLLLoss
 from TTS.tts.layers.overflow.common_layers import Encoder, OverflowUtils
 from TTS.tts.layers.overflow.decoder import Decoder
@@ -64,9 +65,11 @@ class Overflow(BaseTTS):
     Check :class:`TTS.tts.configs.overflow.OverFlowConfig` for class arguments.
     """
 
+    config: OverflowConfig
+
     def __init__(
         self,
-        config: "OverFlowConfig",
+        config: Coqpit,
         ap: "AudioProcessor" = None,
         tokenizer: "TTSTokenizer" = None,
         speaker_manager: SpeakerManager = None,
@@ -75,7 +78,6 @@ class Overflow(BaseTTS):
 
         # pass all config fields to `self`
         # for fewer code change
-        self.config = config
         for key in config:
             setattr(self, key, config[key])
 

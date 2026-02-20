@@ -1,7 +1,6 @@
 import logging
 import os
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,7 @@ from torch.utils.data.sampler import WeightedRandomSampler
 from trainer.torch import DistributedSampler, DistributedSamplerWrapper
 from trainer.trainer_utils import get_optimizer, get_scheduler
 
+from TTS.tts.configs.delightful_tts_config import DelightfulTtsArgs, DelightfulTTSConfig
 from TTS.tts.configs.shared_configs import BaseTTSConfig
 from TTS.tts.datasets.dataset import F0Dataset, TTSDataset, _parse_sample, get_attribute_balancer_weights
 from TTS.tts.layers.delightful_tts.acoustic_model import AcousticModel
@@ -269,103 +269,6 @@ class ForwardTTSE2eDataset(TTSDataset):
 
 
 ##############################
-# CONFIG DEFINITIONS
-##############################
-
-
-@dataclass
-class VocoderConfig(Coqpit):
-    resblock_type_decoder: str = "1"
-    resblock_kernel_sizes_decoder: list[int] = field(default_factory=lambda: [3, 7, 11])
-    resblock_dilation_sizes_decoder: list[list[int]] = field(default_factory=lambda: [[1, 3, 5], [1, 3, 5], [1, 3, 5]])
-    upsample_rates_decoder: list[int] = field(default_factory=lambda: [8, 8, 2, 2])
-    upsample_initial_channel_decoder: int = 512
-    upsample_kernel_sizes_decoder: list[int] = field(default_factory=lambda: [16, 16, 4, 4])
-    use_spectral_norm_discriminator: bool = False
-    upsampling_rates_discriminator: list[int] = field(default_factory=lambda: [4, 4, 4, 4])
-    periods_discriminator: list[int] = field(default_factory=lambda: [2, 3, 5, 7, 11])
-    pretrained_model_path: str | None = None
-
-
-@dataclass
-class DelightfulTtsAudioConfig(Coqpit):
-    sample_rate: int = 22050
-    hop_length: int = 256
-    win_length: int = 1024
-    fft_size: int = 1024
-    mel_fmin: float = 0.0
-    mel_fmax: float = 8000
-    num_mels: int = 100
-    pitch_fmax: float = 640.0
-    pitch_fmin: float = 1.0
-    resample: bool = False
-    preemphasis: float = 0.0
-    ref_level_db: int = 20
-    do_sound_norm: bool = False
-    log_func: str = "np.log10"
-    do_trim_silence: bool = True
-    trim_db: int = 45
-    do_rms_norm: bool = False
-    db_level: float = None
-    power: float = 1.5
-    griffin_lim_iters: int = 60
-    spec_gain: int = 20
-    do_amp_to_db_linear: bool = True
-    do_amp_to_db_mel: bool = True
-    min_level_db: int = -100
-    max_norm: float = 4.0
-
-
-@dataclass
-class DelightfulTtsArgs(Coqpit):
-    num_chars: int = 100
-    spec_segment_size: int = 32
-    n_hidden_conformer_encoder: int = 512
-    n_layers_conformer_encoder: int = 6
-    n_heads_conformer_encoder: int = 8
-    dropout_conformer_encoder: float = 0.1
-    kernel_size_conv_mod_conformer_encoder: int = 7
-    kernel_size_depthwise_conformer_encoder: int = 7
-    lrelu_slope: float = 0.3
-    n_hidden_conformer_decoder: int = 512
-    n_layers_conformer_decoder: int = 6
-    n_heads_conformer_decoder: int = 8
-    dropout_conformer_decoder: float = 0.1
-    kernel_size_conv_mod_conformer_decoder: int = 11
-    kernel_size_depthwise_conformer_decoder: int = 11
-    bottleneck_size_p_reference_encoder: int = 4
-    bottleneck_size_u_reference_encoder: int = 512
-    ref_enc_filters_reference_encoder = [32, 32, 64, 64, 128, 128]
-    ref_enc_size_reference_encoder: int = 3
-    ref_enc_strides_reference_encoder = [1, 2, 1, 2, 1]
-    ref_enc_pad_reference_encoder = [1, 1]
-    ref_enc_gru_size_reference_encoder: int = 32
-    ref_attention_dropout_reference_encoder: float = 0.2
-    token_num_reference_encoder: int = 32
-    predictor_kernel_size_reference_encoder: int = 5
-    n_hidden_variance_adaptor: int = 512
-    kernel_size_variance_adaptor: int = 5
-    dropout_variance_adaptor: float = 0.5
-    n_bins_variance_adaptor: int = 256
-    emb_kernel_size_variance_adaptor: int = 3
-    use_speaker_embedding: bool = False
-    num_speakers: int = 0
-    speakers_file: str = None
-    d_vector_file: str = None
-    speaker_embedding_channels: int = 384
-    use_d_vector_file: bool = False
-    d_vector_dim: int = 0
-    freeze_vocoder: bool = False
-    freeze_text_encoder: bool = False
-    freeze_duration_predictor: bool = False
-    freeze_pitch_predictor: bool = False
-    freeze_energy_predictor: bool = False
-    freeze_basis_vectors_predictor: bool = False
-    freeze_decoder: bool = False
-    length_scale: float = 1.0
-
-
-##############################
 # MODEL DEFINITION
 ##############################
 class DelightfulTTS(BaseTTSE2E):
@@ -399,6 +302,10 @@ class DelightfulTTS(BaseTTSE2E):
     """
 
     # pylint: disable=dangerous-default-value
+
+    config: DelightfulTTSConfig
+    args: DelightfulTtsArgs
+
     def __init__(
         self,
         config: Coqpit,
@@ -1080,51 +987,49 @@ class DelightfulTTS(BaseTTSE2E):
         num_gpus: int,
         rank: int | None = None,
     ) -> "DataLoader":
-        if is_eval and not config.run_eval:
-            loader = None
-        else:
-            # init dataloader
-            dataset = ForwardTTSE2eDataset(
-                samples=samples,
-                ap=self.ap,
-                batch_group_size=0 if is_eval else config.batch_group_size * config.batch_size,
-                min_text_len=config.min_text_len,
-                max_text_len=config.max_text_len,
-                min_audio_len=config.min_audio_len,
-                max_audio_len=config.max_audio_len,
-                phoneme_cache_path=config.phoneme_cache_path,
-                precompute_num_workers=config.precompute_num_workers,
-                compute_f0=config.compute_f0,
-                f0_cache_path=config.f0_cache_path,
-                attn_prior_cache_path=config.attn_prior_cache_path if config.use_attn_priors else None,
-                tokenizer=self.tokenizer,
-                start_by_longest=config.start_by_longest,
-            )
+        # init dataloader
+        dataset = ForwardTTSE2eDataset(
+            samples=samples,
+            ap=self.ap,
+            batch_group_size=0 if is_eval else config.batch_group_size * config.batch_size,
+            min_text_len=config.min_text_len,
+            max_text_len=config.max_text_len,
+            min_audio_len=config.min_audio_len,
+            max_audio_len=config.max_audio_len,
+            phoneme_cache_path=config.phoneme_cache_path,
+            precompute_num_workers=config.precompute_num_workers,
+            compute_f0=config.compute_f0,
+            f0_cache_path=config.f0_cache_path,
+            attn_prior_cache_path=config.attn_prior_cache_path if config.use_attn_priors else None,
+            tokenizer=self.tokenizer,
+            start_by_longest=config.start_by_longest,
+        )
 
-            # wait all the DDP process to be ready
-            if num_gpus > 1:
-                dist.barrier()
+        # wait all the DDP process to be ready
+        if num_gpus > 1:
+            dist.barrier()
 
-            # sort input sequences ascendingly by length
-            dataset.preprocess_samples()
+        # sort input sequences ascendingly by length
+        dataset.preprocess_samples()
 
-            # get samplers
-            sampler = self.get_sampler(config, dataset, num_gpus)
+        # get samplers
+        sampler = self.get_sampler(config, dataset, num_gpus)
 
-            loader = DataLoader(
-                dataset,
-                batch_size=config.eval_batch_size if is_eval else config.batch_size,
-                shuffle=False,  # shuffle is done in the dataset.
-                drop_last=False,  # setting this False might cause issues in AMP training.
-                sampler=sampler,
-                collate_fn=dataset.collate_fn,
-                num_workers=config.num_eval_loader_workers if is_eval else config.num_loader_workers,
-                pin_memory=True,
-            )
+        loader = DataLoader(
+            dataset,
+            batch_size=config.eval_batch_size if is_eval else config.batch_size,
+            shuffle=False,  # shuffle is done in the dataset.
+            drop_last=False,  # setting this False might cause issues in AMP training.
+            sampler=sampler,
+            collate_fn=dataset.collate_fn,
+            num_workers=config.num_eval_loader_workers if is_eval else config.num_loader_workers,
+            pin_memory=True,
+        )
 
-            # get pitch mean and std
-            self.pitch_mean = dataset.f0_dataset.mean
-            self.pitch_std = dataset.f0_dataset.std
+        # get pitch mean and std
+        self.pitch_mean = dataset.f0_dataset.mean
+        self.pitch_std = dataset.f0_dataset.std
+
         return loader
 
     def get_criterion(self):

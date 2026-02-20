@@ -1,4 +1,7 @@
+from typing import Any
+
 import torch
+from coqpit import Coqpit
 from torch import nn
 from trainer.trainer_utils import get_optimizer, get_scheduler
 
@@ -26,7 +29,7 @@ class Tacotron(BaseTacotron):
 
     def __init__(
         self,
-        config: "TacotronConfig",
+        config: Coqpit,
         ap: "AudioProcessor" = None,
         tokenizer: "TTSTokenizer" = None,
         speaker_manager: SpeakerManager = None,
@@ -132,9 +135,7 @@ class Tacotron(BaseTacotron):
                 self.max_decoder_steps,
             )
 
-    def forward(  # pylint: disable=dangerous-default-value
-        self, text, text_lengths, mel_specs=None, mel_lengths=None, aux_input={"speaker_ids": None, "d_vectors": None}
-    ):
+    def forward(self, text, text_lengths, mel_specs=None, mel_lengths=None, aux_input: dict[str, Any] | None = None):
         """
         Shapes:
             text: [B, T_in]
@@ -143,6 +144,8 @@ class Tacotron(BaseTacotron):
             mel_lengths: [B]
             aux_input: 'speaker_ids': [B, 1] and  'd_vectors':[B, C]
         """
+        if aux_input is None:
+            aux_input = {"speaker_ids": None, "d_vectors": None}
         aux_input = self._format_aux_input(aux_input)
         outputs = {"alignments_backward": None, "decoder_outputs_backward": None}
         inputs = self.embedding(text)
@@ -155,14 +158,11 @@ class Tacotron(BaseTacotron):
         if self.gst and self.use_gst:
             # B x gst_dim
             encoder_outputs = self.compute_gst(encoder_outputs, mel_specs)
-        # speaker embedding
-        if self.use_speaker_embedding or self.use_d_vector_file:
-            if not self.use_d_vector_file:
-                # B x 1 x speaker_embed_dim
-                embedded_speakers = self.speaker_embedding(aux_input["speaker_ids"])[:, None]
-            else:
-                # B x 1 x speaker_embed_dim
-                embedded_speakers = torch.unsqueeze(aux_input["d_vectors"], 1)
+        # speaker embedding: B x 1 x speaker_embed_dim
+        embedded_speakers = self._get_speaker_conditioning(
+            aux_input, "speaker_embedding", normalize_d_vector=False, normalize_embedding=False, output_shape="BTC"
+        )
+        if embedded_speakers is not None:
             encoder_outputs = self._concat_speaker_embedding(encoder_outputs, embedded_speakers)
         # Capacitron
         if self.capacitron_vae and self.use_capacitron_vae:
@@ -245,17 +245,13 @@ class Tacotron(BaseTacotron):
                 ),
             )
         if self.num_speakers > 1:
-            if not self.use_d_vector_file:
-                # B x 1 x speaker_embed_dim
-                embedded_speakers = self.speaker_embedding(aux_input["speaker_ids"])
-                # reshape embedded_speakers
-                if embedded_speakers.ndim == 1:
-                    embedded_speakers = embedded_speakers[None, None, :]
-                elif embedded_speakers.ndim == 2:
-                    embedded_speakers = embedded_speakers[None, :]
-            else:
-                # B x 1 x speaker_embed_dim
-                embedded_speakers = torch.unsqueeze(aux_input["d_vectors"], 1)
+            embedded_speakers = self._get_speaker_conditioning(
+                aux_input,
+                "speaker_embedding",
+                normalize_d_vector=False,
+                normalize_embedding=False,
+                output_shape="BTC",
+            )
             encoder_outputs = self._concat_speaker_embedding(encoder_outputs, embedded_speakers)
         decoder_outputs, alignments, stop_tokens = self.decoder.inference(encoder_outputs)
         postnet_outputs = self.postnet(decoder_outputs)

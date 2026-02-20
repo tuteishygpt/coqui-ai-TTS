@@ -8,6 +8,7 @@ from coqpit import Coqpit
 from torch import nn
 from trainer.io import load_fsspec
 
+from TTS.tts.configs.tacotron_config import TacotronConfig
 from TTS.tts.layers.losses import TacotronLoss
 from TTS.tts.models.base_tts import BaseTTS
 from TTS.tts.utils.helpers import sequence_mask
@@ -22,9 +23,11 @@ logger = logging.getLogger(__name__)
 class BaseTacotron(BaseTTS):
     """Base class shared by Tacotron and Tacotron2"""
 
+    config: TacotronConfig
+
     def __init__(
         self,
-        config: "TacotronConfig",
+        config: Coqpit,
         ap: "AudioProcessor",
         tokenizer: "TTSTokenizer",
         speaker_manager: SpeakerManager = None,

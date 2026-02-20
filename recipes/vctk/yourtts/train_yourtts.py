@@ -6,9 +6,9 @@ from trainer import Trainer, TrainerArgs
 from TTS.bin.compute_embeddings import compute_embeddings
 from TTS.bin.resample import resample_files
 from TTS.config.shared_configs import BaseDatasetConfig
-from TTS.tts.configs.vits_config import VitsConfig
+from TTS.tts.configs.vits_config import VitsArgs, VitsAudioConfig, VitsConfig
 from TTS.tts.datasets import load_tts_samples
-from TTS.tts.models.vits import CharactersConfig, Vits, VitsArgs, VitsAudioConfig
+from TTS.tts.models.vits import CharactersConfig, Vits
 from TTS.utils.downloaders import download_vctk
 
 

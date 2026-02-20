@@ -1,5 +1,4 @@
 import os
-from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -12,25 +11,11 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from trainer.trainer_utils import get_optimizer, get_scheduler
 
+from TTS.vocoder.configs import WavegradConfig
 from TTS.vocoder.datasets import WaveGradDataset
 from TTS.vocoder.layers.wavegrad import Conv1d, DBlock, FiLM, UBlock
 from TTS.vocoder.models.base_vocoder import BaseVocoder
 from TTS.vocoder.utils.generic_utils import plot_results
-
-
-@dataclass
-class WavegradArgs(Coqpit):
-    in_channels: int = 80
-    out_channels: int = 1
-    use_weight_norm: bool = False
-    y_conv_channels: int = 32
-    x_conv_channels: int = 768
-    dblock_out_channels: list[int] = field(default_factory=lambda: [128, 128, 256, 512])
-    ublock_out_channels: list[int] = field(default_factory=lambda: [512, 512, 256, 128, 128])
-    upsample_factors: list[int] = field(default_factory=lambda: [4, 4, 4, 2, 2])
-    upsample_dilations: list[list[int]] = field(
-        default_factory=lambda: [[1, 2, 1, 2], [1, 2, 1, 2], [1, 2, 4, 8], [1, 2, 4, 8], [1, 2, 4, 8]]
-    )
 
 
 class Wavegrad(BaseVocoder):
@@ -56,10 +41,10 @@ class Wavegrad(BaseVocoder):
         Audio samples are available at this https URL.
     """
 
-    # pylint: disable=dangerous-default-value
+    config: WavegradConfig
+
     def __init__(self, config: Coqpit):
         super().__init__(config)
-        self.config = config
         self.use_weight_norm = config.model_params.use_weight_norm
         self.hop_len = np.prod(config.model_params.upsample_factors)
         self.noise_level = None
@@ -220,7 +205,7 @@ class Wavegrad(BaseVocoder):
 
     def load_checkpoint(
         self,
-        config: Coqpit,
+        config: WavegradConfig,
         checkpoint_path: str | os.PathLike[Any],
         *,
         eval: bool = False,

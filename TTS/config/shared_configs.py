@@ -222,11 +222,11 @@ class BaseDatasetConfig(Coqpit):
             train the duration predictor.
     """
 
-    formatter: str = ""
-    dataset_name: str = ""
-    path: str = ""
+    formatter: str | None = ""
+    dataset_name: str | None = ""
+    path: str | None = ""
     meta_file_train: str = ""
-    ignored_speakers: list[str] = None
+    ignored_speakers: list[str] | None = None
     language: str = ""
     phonemizer: str = ""
     meta_file_val: str = ""
@@ -265,3 +265,8 @@ class BaseTrainingConfig(TrainerConfig):
     num_loader_workers: int = 0
     num_eval_loader_workers: int = 0
     use_noise_augment: bool = False
+
+
+@dataclass
+class ModelArgs(Coqpit):
+    """Parameters necessary for model instantiation."""

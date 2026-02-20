@@ -4,6 +4,7 @@ import os
 import re
 import textwrap
 from functools import cached_property
+from typing import Any
 
 import torch
 from ko_speech_tools import hangul_romanize
@@ -687,14 +688,11 @@ def japanese_cleaners(text, katsu):
     return text
 
 
-DEFAULT_VOCAB_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/tokenizer.json")
-
-
 class VoiceBpeTokenizer:
-    def __init__(self, vocab_file=None):
+    def __init__(self, vocab_file: str | os.PathLike[Any] | None = None):
         self.tokenizer = None
         if vocab_file is not None:
-            self.tokenizer = Tokenizer.from_file(vocab_file)
+            self.tokenizer = Tokenizer.from_file(str(vocab_file))
         self.char_limits = {
             "en": 250,
             "de": 253,

@@ -8,6 +8,7 @@ from coqpit import Coqpit
 from monotonic_alignment_search import maximum_path
 from torch import nn
 
+from TTS.tts.configs.delightful_tts_config import DelightfulTtsArgs
 from TTS.tts.layers.delightful_tts.conformer import Conformer
 from TTS.tts.layers.delightful_tts.encoders import (
     PhonemeLevelProsodyEncoder,
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 class AcousticModel(torch.nn.Module):
     def __init__(
         self,
-        args: "ModelArgs",
+        args: DelightfulTtsArgs,
         tokenizer: "TTSTokenizer" = None,
         speaker_manager: "SpeakerManager" = None,
     ):
@@ -193,19 +194,6 @@ class AcousticModel(torch.nn.Module):
             durations = aux_input["durations"]
 
         return sid, g, lid, durations
-
-    def _set_speaker_input(self, aux_input: dict):
-        d_vectors = aux_input.get("d_vectors", None)
-        speaker_ids = aux_input.get("speaker_ids", None)
-
-        if d_vectors is not None and speaker_ids is not None:
-            raise ValueError("[!] Cannot use d-vectors and speaker-ids together.")
-
-        if speaker_ids is not None and not hasattr(self, "emb_g"):
-            raise ValueError("[!] Cannot use speaker-ids without enabling speaker embedding.")
-
-        g = speaker_ids if speaker_ids is not None else d_vectors
-        return g
 
     # def set_embedding_dims(self):
     #     if self.embedded_speaker_dim > 0:

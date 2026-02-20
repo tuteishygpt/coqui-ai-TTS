@@ -1,10 +1,9 @@
-from dataclasses import dataclass, field
-
 import torch
 from coqpit import Coqpit
 from monotonic_alignment_search import maximum_path
 from torch import nn
 
+from TTS.tts.configs.align_tts_config import AlignTTSConfig
 from TTS.tts.layers.align_tts.mdn import MDNBlock
 from TTS.tts.layers.feed_forward.decoder import Decoder
 from TTS.tts.layers.feed_forward.duration_predictor import DurationPredictor
@@ -15,55 +14,6 @@ from TTS.tts.utils.helpers import expand_encoder_outputs, generate_attention, se
 from TTS.tts.utils.speakers import SpeakerManager
 from TTS.tts.utils.text.tokenizer import TTSTokenizer
 from TTS.tts.utils.visual import plot_alignment, plot_spectrogram
-
-
-@dataclass
-class AlignTTSArgs(Coqpit):
-    """
-    Args:
-        num_chars (int):
-            number of unique input to characters
-        out_channels (int):
-            number of output tensor channels. It is equal to the expected spectrogram size.
-        hidden_channels (int):
-            number of channels in all the model layers.
-        hidden_channels_ffn (int):
-            number of channels in transformer's conv layers.
-        hidden_channels_dp (int):
-            number of channels in duration predictor network.
-        num_heads (int):
-            number of attention heads in transformer networks.
-        num_transformer_layers (int):
-            number of layers in encoder and decoder transformer blocks.
-        dropout_p (int):
-            dropout rate in transformer layers.
-        length_scale (int, optional):
-            coefficient to set the speech speed. <1 slower, >1 faster. Defaults to 1.
-        num_speakers (int, optional):
-            number of speakers for multi-speaker training. Defaults to 0.
-        external_c (bool, optional):
-            enable external speaker embeddings. Defaults to False.
-        c_in_channels (int, optional):
-            number of channels in speaker embedding vectors. Defaults to 0.
-    """
-
-    num_chars: int = None
-    out_channels: int = 80
-    hidden_channels: int = 256
-    hidden_channels_dp: int = 256
-    encoder_type: str = "fftransformer"
-    encoder_params: dict = field(
-        default_factory=lambda: {"hidden_channels_ffn": 1024, "num_heads": 2, "num_layers": 6, "dropout_p": 0.1}
-    )
-    decoder_type: str = "fftransformer"
-    decoder_params: dict = field(
-        default_factory=lambda: {"hidden_channels_ffn": 1024, "num_heads": 2, "num_layers": 6, "dropout_p": 0.1}
-    )
-    length_scale: float = 1.0
-    num_speakers: int = 0
-    use_speaker_embedding: bool = False
-    use_d_vector_file: bool = False
-    d_vector_dim: int = 0
 
 
 class AlignTTS(BaseTTS):
@@ -101,9 +51,11 @@ class AlignTTS(BaseTTS):
 
     # pylint: disable=dangerous-default-value
 
+    config: AlignTTSConfig
+
     def __init__(
         self,
-        config: "AlignTTSConfig",
+        config: Coqpit,
         ap: "AudioProcessor" = None,
         tokenizer: "TTSTokenizer" = None,
         speaker_manager: SpeakerManager = None,

@@ -4,9 +4,9 @@ from glob import glob
 from trainer import Trainer, TrainerArgs
 
 from TTS.tts.configs.shared_configs import BaseDatasetConfig
-from TTS.tts.configs.vits_config import VitsConfig
+from TTS.tts.configs.vits_config import VitsArgs, VitsAudioConfig, VitsConfig
 from TTS.tts.datasets import load_tts_samples
-from TTS.tts.models.vits import Vits, VitsArgs, VitsAudioConfig
+from TTS.tts.models.vits import Vits
 from TTS.tts.utils.languages import LanguageManager
 from TTS.tts.utils.speakers import SpeakerManager
 from TTS.tts.utils.text.tokenizer import TTSTokenizer

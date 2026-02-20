@@ -5,13 +5,11 @@ import numpy as np
 import torch
 from coqpit import Coqpit
 
-from TTS.config import check_config_and_model_args
 from TTS.tts.utils.managers import BaseIDManager
 
 
 class LanguageManager(BaseIDManager):
-    """Manage the languages for multi-lingual 🐸TTS models. Load a datafile and parse the information
-    in a way that can be queried by language.
+    """Manage the languages for multi-lingual 🐸TTS models.
 
     Args:
         language_ids_file_path (str, optional): Path to the metafile that maps language names to ids used by
@@ -39,11 +37,11 @@ class LanguageManager(BaseIDManager):
         return len(list(self.name_to_id.keys()))
 
     @property
-    def language_names(self) -> list:
+    def language_names(self) -> list[str]:
         return list(self.name_to_id.keys())
 
     @staticmethod
-    def parse_language_ids_from_config(c: Coqpit) -> dict:
+    def parse_language_ids_from_config(c: Coqpit) -> dict[str, int]:
         """Set language id from config.
 
         Args:
@@ -69,19 +67,11 @@ class LanguageManager(BaseIDManager):
         self.name_to_id = self.parse_language_ids_from_config(c)
 
     @staticmethod
-    def parse_ids_from_data(items: list, parse_key: str) -> Any:
+    def parse_ids_from_data(items: list[dict[str, Any]], parse_key: str) -> Any:
         raise NotImplementedError
 
-    def set_ids_from_data(self, items: list, parse_key: str) -> Any:
+    def set_ids_from_data(self, items: list[dict[str, Any]], parse_key: str) -> Any:
         raise NotImplementedError
-
-    def save_ids_to_file(self, file_path: str | os.PathLike[Any]) -> None:
-        """Save language IDs to a json file.
-
-        Args:
-            file_path (str): Path to the output file.
-        """
-        self._save_json(file_path, self.name_to_id)
 
     @staticmethod
     def init_from_config(config: Coqpit) -> Optional["LanguageManager"]:
@@ -90,15 +80,15 @@ class LanguageManager(BaseIDManager):
         Args:
             config (Coqpit): Coqpit config.
         """
-        if check_config_and_model_args(config, "use_language_embedding", True):
-            if config.get("language_ids_file", None):
-                return LanguageManager(language_ids_file_path=config.language_ids_file)
+        if config.model_args.get("use_language_embedding"):
+            if config.model_args.get("language_ids_file"):
+                return LanguageManager(language_ids_file_path=config.model_args.language_ids_file)
             # Fall back to parse language IDs from the config
             return LanguageManager(config=config)
         return None
 
 
-def get_language_balancer_weights(items: list):
+def get_language_balancer_weights(items: list[dict[str, Any]]) -> torch.Tensor:
     language_names = np.array([item["language"] for item in items])
     unique_language_names = np.unique(language_names).tolist()
     language_ids = [unique_language_names.index(l) for l in language_names]

@@ -5,10 +5,10 @@ import torch
 from trainer import Trainer, TrainerArgs
 
 from TTS.config.shared_configs import BaseDatasetConfig
+from TTS.tts.configs.xtts_config import XttsAudioConfig
 from TTS.tts.datasets import load_tts_samples
 from TTS.tts.layers.xtts.dvae import DiscreteVAE
 from TTS.tts.layers.xtts.trainer.gpt_trainer import GPTArgs, GPTTrainer, GPTTrainerConfig
-from TTS.tts.models.xtts import XttsAudioConfig
 
 config_dataset = BaseDatasetConfig(
     formatter="ljspeech",
