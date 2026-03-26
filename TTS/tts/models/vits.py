@@ -1322,7 +1322,7 @@ class Vits(BaseTTS):
         torch.onnx.export(
             model=self,
             args=dummy_input,
-            opset_version=15,
+            opset_version=18,
             f=output_path,
             verbose=verbose,
             input_names=input_names,
@@ -1332,6 +1332,7 @@ class Vits(BaseTTS):
                 "input_lengths": {0: "batch_size"},
                 "output": {0: "batch_size", 1: "time1", 2: "time2"},
             },
+            dynamo=False,
         )
 
         # rollback
