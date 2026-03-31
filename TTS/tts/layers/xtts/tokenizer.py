@@ -1,8 +1,9 @@
-#V1
+# V1 (with detailed logging)
 import logging
 import os
 import re
 import textwrap
+import inspect
 from functools import cached_property
 from typing import Any
 
@@ -15,6 +16,20 @@ from TTS.tts.layers.xtts.zh_num2words import TextNorm as zh_num2words
 from TTS.tts.utils.text.cleaners import collapse_whitespace, lowercase
 
 logger = logging.getLogger(__name__)
+
+
+def _fn():
+    """Helper to print fully-qualified function name in logs."""
+    frame = inspect.currentframe().f_back
+    mod = frame.f_globals.get("__name__", "")
+    return f"{mod}.{frame.f_code.co_name}"
+
+
+def _log_chunks(chunks, origin):
+    """Log each chunk's index, length, and text."""
+    logger.info("%s: produced %d chunk(s)", origin, len(chunks))
+    for i, c in enumerate(chunks, 1):
+        logger.info("%s: chunk %d -> %d chars | %s", origin, i, len(c), c)
 
 
 def get_spacy_lang(lang):
@@ -50,17 +65,32 @@ def split_sentence(text, lang, text_split_length=250, min_chunk_length=40):
     (калі кавалкаў больш за адзін). Калі для гэтага трэба, апошні кавалак
     можа перавысіць text_split_length.
     """
+    origin = _fn()
     text = text.strip()
+    logger.info(
+        "%s: called with lang=%s, text_len=%d, text_split_length=%s, min_chunk_length=%s",
+        origin,
+        lang,
+        len(text),
+        text_split_length,
+        min_chunk_length,
+    )
+
     if not text:
+        logger.info("%s: empty text -> []", origin)
         return []
 
     # Калі ліміт не заданы або тэкст і так карацейшы — вяртаем як ёсць
     if text_split_length is None or len(text) <= text_split_length:
-        return [text]
+        logger.info("%s: early-return (len(text) <= text_split_length)", origin)
+        chunks = [text]
+        _log_chunks(chunks, origin)
+        return chunks
 
     # 1. Спачатку рэжам па сказах і ліміце даўжыні
     nlp = get_spacy_lang(lang)
     nlp.add_pipe("sentencizer")
+    logger.info("%s: using spaCy sentencizer (%s)", origin, type(nlp).__name__)
     doc = nlp(text)
 
     raw_chunks = []
@@ -77,6 +107,7 @@ def split_sentence(text, lang, text_split_length=250, min_chunk_length=40):
             if current:
                 raw_chunks.append(current)
                 current = ""
+            logger.info("%s: long sentence (%d) > %d -> textwrap.wrap", origin, len(sentence), text_split_length)
             for line in textwrap.wrap(
                 sentence,
                 width=text_split_length,
@@ -101,10 +132,14 @@ def split_sentence(text, lang, text_split_length=250, min_chunk_length=40):
     if current:
         raw_chunks.append(current)
 
+    logger.info("%s: raw_chunks after sentence pass -> %d", origin, len(raw_chunks))
+
     # 2. Падчэсваем кавалкі: не пакідаем кавалкаў < min_chunk_length,
     # калі толькі гэта не адзіны кавалак.
     if len(raw_chunks) <= 1:
-        return [c.lstrip() for c in raw_chunks]
+        chunks = [c.lstrip() for c in raw_chunks]
+        _log_chunks(chunks, origin)
+        return chunks
 
     merged_chunks = []
     i = 0
@@ -112,6 +147,7 @@ def split_sentence(text, lang, text_split_length=250, min_chunk_length=40):
         chunk = raw_chunks[i]
         # Пакуль кавалак карацейшы за min_chunk_length і ёсць наступныя — зліваём
         while len(chunk) < min_chunk_length and i + 1 < len(raw_chunks):
+            logger.info("%s: merging short chunk (%d < %d) with next", origin, len(chunk), min_chunk_length)
             i += 1
             chunk = (chunk + " " + raw_chunks[i]).strip()
         merged_chunks.append(chunk)
@@ -120,10 +156,18 @@ def split_sentence(text, lang, text_split_length=250, min_chunk_length=40):
     # Калі апошні кавалак усё яшчэ карацейшы за мінімум і кавалкаў > 1 —
     # прылепім яго да папярэдняга (ён можа перайсці ліміт text_split_length).
     if len(merged_chunks) > 1 and len(merged_chunks[-1]) < min_chunk_length:
+        logger.info(
+            "%s: last chunk still short (%d < %d) -> append to previous (may exceed limit)",
+            origin,
+            len(merged_chunks[-1]),
+            min_chunk_length,
+        )
         merged_chunks[-2] = (merged_chunks[-2] + " " + merged_chunks[-1]).strip()
         merged_chunks.pop()
 
-    return [c.lstrip() for c in merged_chunks]
+    chunks = [c.lstrip() for c in merged_chunks]
+    _log_chunks(chunks, origin)
+    return chunks
 
 
 # List of (regular expression, replacement) pairs for abbreviations:
@@ -653,6 +697,7 @@ def expand_numbers_multilingual(text, lang="en"):
 
 
 def multilingual_cleaners(text, lang):
+    logger.info("%s: multilingual_cleaners(lang=%s) start", _fn(), lang)
     text = text.replace('"', "")
     if lang == "tr":
         text = text.replace("İ", "i")
@@ -663,6 +708,7 @@ def multilingual_cleaners(text, lang):
     text = expand_abbreviations_multilingual(text, lang)
     text = expand_symbols_multilingual(text, lang=lang)
     text = collapse_whitespace(text)
+    logger.info("%s: multilingual_cleaners(lang=%s) done, out_len=%d", _fn(), lang, len(text))
     text = remove_quotes(text)
     return text
 
@@ -673,6 +719,7 @@ def remove_quotes(text):
 
 
 def chinese_transliterate(text):
+    logger.info("%s: chinese_transliterate()", _fn())
     try:
         import pypinyin
     except ImportError as e:
@@ -683,6 +730,7 @@ def chinese_transliterate(text):
 
 
 def japanese_cleaners(text, katsu):
+    logger.info("%s: japanese_cleaners() using cutlet", _fn())
     text = katsu.romaji(text)
     text = lowercase(text)
     return text
@@ -718,6 +766,7 @@ class VoiceBpeTokenizer:
     def katsu(self):
         import cutlet
 
+        logger.info("%s: initializing cutlet (Japanese romanization)", _fn())
         return cutlet.Cutlet()
 
     def check_input_length(self, txt, lang):
@@ -725,41 +774,54 @@ class VoiceBpeTokenizer:
         limit = self.char_limits.get(lang, 250)
         if len(txt) > limit:
             logger.warning(
-                "The text length exceeds the character limit of %d for language '%s', this might cause truncated audio: %s",
+                "%s: The text length exceeds the character limit of %d for language '%s', this might cause truncated audio: %s",
+                _fn(),
                 limit,
                 lang,
                 txt[:50] + "...",
             )
+        else:
+            logger.info("%s: input length OK (%d <= %d) for lang='%s'", _fn(), len(txt), limit, lang)
 
     def preprocess_text(self, txt, lang):
+        logger.info("%s: preprocess_text(lang=%s) start (len=%d)", _fn(), lang, len(txt))
         if lang in {"ar", "be", "cs", "de", "en", "es", "fr", "hi", "hu", "it", "nl", "pl", "pt", "ru", "tr", "zh", "ko"}:
+            logger.info("%s: path -> multilingual_cleaners()", _fn())
             txt = multilingual_cleaners(txt, lang)
             if lang == "zh":
+                logger.info("%s: extra step -> chinese_transliterate()", _fn())
                 txt = chinese_transliterate(txt)
             if lang == "ko":
+                logger.info("%s: extra step -> hangul_romanize()", _fn())
                 txt = hangul_romanize(txt)
         elif lang == "ja":
+            logger.info("%s: path -> japanese_cleaners()", _fn())
             txt = japanese_cleaners(txt, self.katsu)
         else:
             raise NotImplementedError(f"Language '{lang}' is not supported.")
+        logger.info("%s: preprocess_text(lang=%s) done (out_len=%d)", _fn(), lang, len(txt))
         return txt
 
     def encode(self, txt, lang):
         lang = lang.split("-")[0]
+        logger.info("%s: encode(lang=%s) start", _fn(), lang)
         self.check_input_length(txt, lang)
         txt = self.preprocess_text(txt, lang)
-        lang = "zh-cn" if lang == "zh" else lang
-        txt = f"[{lang}]{txt}"
-        txt = txt.replace(" ", "[SPACE]")
-        return self.tokenizer.encode(txt).ids
+        lang_tag = "zh-cn" if lang == "zh" else lang
+        txt_tagged = f"[{lang_tag}]{txt}".replace(" ", "[SPACE]")
+        ids = self.tokenizer.encode(txt_tagged).ids
+        logger.info("%s: encode(lang=%s) done -> %d tokens", _fn(), lang, len(ids))
+        return ids
 
     def decode(self, seq):
+        logger.info("%s: decode() start", _fn())
         if isinstance(seq, torch.Tensor):
             seq = seq.cpu().numpy()
         txt = self.tokenizer.decode(seq, skip_special_tokens=False).replace(" ", "")
         txt = txt.replace("[SPACE]", " ")
         txt = txt.replace("[STOP]", "")
         txt = txt.replace("[UNK]", "")
+        logger.info("%s: decode() done (len=%d)", _fn(), len(txt))
         return txt
 
     def __len__(self):
